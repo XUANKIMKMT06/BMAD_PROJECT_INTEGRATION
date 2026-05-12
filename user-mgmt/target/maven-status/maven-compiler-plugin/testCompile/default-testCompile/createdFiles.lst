@@ -1,0 +1,5 @@
+com\example\management\support\fixtures\BaseIntegrationTest.class
+com\example\management\support\helpers\ApiTestClient.class
+com\example\management\support\helpers\AuthTestHelper.class
+com\example\management\api\ExampleAuthApiTest.class
+com\example\management\support\factories\UserRequestFactory.class

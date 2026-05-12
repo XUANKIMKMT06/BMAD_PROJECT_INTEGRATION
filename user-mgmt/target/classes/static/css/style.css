@@ -1,0 +1,14 @@
+body {
+    background-color: #f4f6f9; !important;
+}
+
+.dashboard-container {
+    background-color: white;
+    max-width: 400px;
+    min-width: 330px;
+    margin: auto;
+    width: auto;
+    padding: 32px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}

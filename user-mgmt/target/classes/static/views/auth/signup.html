@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign up</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="../../css/style.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<body class="d-flex justify-content-center align-items-center min-vh-100">
+<div class="dashboard-container d-flex flex-column align-items-center w-50">
+    <div id="state"
+         class="text-danger border border-danger rounded bg-danger-subtle  p-2 w-75 mb-2"
+         style="visibility: hidden; position: absolute">
+    </div>
+    <form id="registerForm" class="w-75">
+        <div class="form-group mb-2">
+            <label for="name">Name <span class="text-danger">*</span></label>
+            <input id="name" class="form-control" name="name" type="text" required>
+        </div>
+        <div class="form-group mb-2">
+            <label for="username">Email <span class="text-danger">*</span></label>
+            <input id="username" class="form-control" name="username" type="email" required>
+            <small id="emailHelp" class="form-text text-muted">Your email is visible to public</small>
+        </div>
+        <div class="form-group mb-2">
+            <label for="password">Password <span class="text-danger">*</span></label>
+            <input id="password" class="form-control mb-2" name="password" type="password" required>
+        </div>
+        <div class="form-group text-muted mb-2">
+            <label for="terms"></label><input type="checkbox" class="form-check-input" id="terms" required><small>
+            Agree to all terms <span class="text-danger">*</span></small>
+        </div>
+        <div class="d-flex">
+            <button id="btn" type="submit" class="btn btn-primary w-100 mb-2">SignUp</button>
+        </div>
+    </form>
+    <small class="text-muted w-75 mb-5">Already have an account? <a href="/login" class="text-muted"> login
+        here</a></small>
+</div>
+<script src="/js/main.js"></script>
+</body>
+</html>
