@@ -92,7 +92,7 @@ jobs:
           path: user-mgmt/target/surefire-reports/
           retention-days: 30
 
-  performance-smoke:
+  performance_smoke:
     name: Performance Smoke (k6)
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -152,7 +152,7 @@ jobs:
             kill "$(cat /tmp/user-mgmt.pid)" || true
           fi
 
-  performance-p0:
+  performance_p0:
     name: Performance P0 (k6)
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -226,17 +226,24 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - test
-      - performance-smoke
-      - performance-p0
+      - performance_smoke
+      - performance_p0
     if: always()
 
     steps:
       - name: Generate summary
+        shell: bash
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          PERF_SMOKE_RESULT: ${{ needs.performance_smoke.result }}
+          PERF_P0_RESULT: ${{ needs.performance_p0.result }}
         run: |
-          echo "## Test Execution Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Unit and integration tests: ${{ needs.test.result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Performance smoke (PR): ${{ needs['performance-smoke'].result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Performance P0 (schedule): ${{ needs['performance-p0'].result }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- JUnit shards: 2" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Burn-in: skipped for backend-only stack" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Test Execution Summary"
+            echo ""
+            echo "- Unit and integration tests: ${TEST_RESULT}"
+            echo "- Performance smoke (PR): ${PERF_SMOKE_RESULT}"
+            echo "- Performance P0 (schedule): ${PERF_P0_RESULT}"
+            echo "- JUnit shards: 2"
+            echo "- Burn-in: skipped for backend-only stack"
+          } >> "${GITHUB_STEP_SUMMARY}"
