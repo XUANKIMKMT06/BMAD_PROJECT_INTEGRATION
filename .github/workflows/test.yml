@@ -229,21 +229,20 @@ jobs:
       - performance_smoke
       - performance_p0
     if: always()
+    continue-on-error: true
 
     steps:
       - name: Generate summary
-        shell: bash
-        env:
-          TEST_RESULT: ${{ needs.test.result }}
-          PERF_SMOKE_RESULT: ${{ needs.performance_smoke.result }}
-          PERF_P0_RESULT: ${{ needs.performance_p0.result }}
-        run: |
-          {
-            echo "## Test Execution Summary"
-            echo ""
-            echo "- Unit and integration tests: ${TEST_RESULT}"
-            echo "- Performance smoke (PR): ${PERF_SMOKE_RESULT}"
-            echo "- Performance P0 (schedule): ${PERF_P0_RESULT}"
-            echo "- JUnit shards: 2"
-            echo "- Burn-in: skipped for backend-only stack"
-          } >> "${GITHUB_STEP_SUMMARY}"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = [
+              '## Test Execution Summary',
+              '',
+              `- Unit and integration tests: ${{ needs.test.result }}`,
+              `- Performance smoke (PR): ${{ needs.performance_smoke.result }}`,
+              `- Performance P0 (schedule): ${{ needs.performance_p0.result }}`,
+              '- JUnit shards: 2',
+              '- Burn-in: skipped for backend-only stack',
+            ].join('\n');
+            await core.summary.addRaw(summary).write();
