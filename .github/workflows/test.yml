@@ -1,0 +1,234 @@
+# GitHub Actions quality pipeline for user-mgmt
+# Stack: backend | Framework: JUnit 5 + Spring Boot Test (Maven Surefire)
+# Performance: k6 smoke on pull requests; P0 suite on schedule
+
+name: Test Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+  # Weekly P0 performance suite (Sunday 02:00 UTC)
+    - cron: "0 2 * * 0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: user-mgmt
+
+env:
+  JAVA_VERSION: "17"
+  BASE_URL: http://localhost:8080
+  ADMIN_USER: alice@mail.co
+  ADMIN_PASSWORD: pass
+  USER_PASSWORD: Password1
+  PERF_ARTIFACT_DIR: ${{ github.workspace }}/_bmad-output/test-artifacts/performance
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Validate and compile
+        run: ./mvnw -B validate compile -DskipTests
+
+  test:
+    name: Test (Shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            test_classes: ApplicationTests,AuthenticationTest
+          - shard: 2
+            test_classes: ExampleAuthApiTest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Run tests
+        run: ./mvnw -B -Dtest=${{ matrix.test_classes }} test
+
+      - name: Upload Surefire reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-${{ matrix.shard }}
+          path: user-mgmt/target/surefire-reports/
+          retention-days: 30
+
+  performance-smoke:
+    name: Performance Smoke (k6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: test
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Build application
+        run: ./mvnw -B -DskipTests package
+
+      - name: Start application (perf profile)
+        run: |
+          ./mvnw -B spring-boot:run -Dspring-boot.run.profiles=perf > /tmp/user-mgmt.log 2>&1 &
+          echo $! > /tmp/user-mgmt.pid
+          for attempt in $(seq 1 60); do
+            if curl -sf "$BASE_URL/" > /dev/null; then
+              echo "Application is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Application failed to start"
+          tail -n 200 /tmp/user-mgmt.log || true
+          exit 1
+
+      - name: Run k6 smoke
+        run: k6 run tests/nfr/performance/smoke.k6.js
+
+      - name: Upload performance summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-smoke-summary
+          path: _bmad-output/test-artifacts/performance/
+          retention-days: 30
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f /tmp/user-mgmt.pid ]; then
+            kill "$(cat /tmp/user-mgmt.pid)" || true
+          fi
+
+  performance-p0:
+    name: Performance P0 (k6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Build application
+        run: ./mvnw -B -DskipTests package
+
+      - name: Start application (perf profile)
+        run: |
+          ./mvnw -B spring-boot:run -Dspring-boot.run.profiles=perf > /tmp/user-mgmt.log 2>&1 &
+          echo $! > /tmp/user-mgmt.pid
+          for attempt in $(seq 1 60); do
+            if curl -sf "$BASE_URL/" > /dev/null; then
+              echo "Application is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Application failed to start"
+          tail -n 200 /tmp/user-mgmt.log || true
+          exit 1
+
+      - name: Run k6 P0 suite
+        run: |
+          set -euo pipefail
+          for script in \
+            tests/nfr/performance/pf01-admin-list.k6.js \
+            tests/nfr/performance/pf02-login-storm.k6.js \
+            tests/nfr/performance/pf03-home.k6.js \
+            tests/nfr/performance/pf04-mixed-admin.k6.js
+          do
+            echo "Running $script"
+            k6 run "$script"
+          done
+
+      - name: Upload performance summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-p0-summaries
+          path: _bmad-output/test-artifacts/performance/
+          retention-days: 30
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f /tmp/user-mgmt.pid ]; then
+            kill "$(cat /tmp/user-mgmt.pid)" || true
+          fi
+
+  report:
+    name: Test Report
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - performance-smoke
+      - performance-p0
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          {
+            echo "## Test Execution Summary"
+            echo ""
+            echo "- **Unit and integration tests**: ${{ needs.test.result }}"
+            echo "- **Performance smoke (PR)**: ${{ needs.performance-smoke.result }}"
+            echo "- **Performance P0 (schedule)**: ${{ needs.performance-p0.result }}"
+            echo "- **JUnit shards**: 2 (suite size does not warrant four-way sharding)"
+            echo "- **Burn-in**: skipped for backend-only stack"
+            echo ""
+            echo "Artifacts include Surefire reports on failure and k6 summary JSON under \`_bmad-output/test-artifacts/performance/\`."
+          } >> "$GITHUB_STEP_SUMMARY"
